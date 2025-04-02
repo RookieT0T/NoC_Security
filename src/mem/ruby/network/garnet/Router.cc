@@ -49,7 +49,7 @@ namespace garnet
 {
 
 Router::Router(const Params &p)
-  : BasicRouter(p), Consumer(this), m_latency(p.latency),
+  : BasicRouter(p), Consumer(this), m_latency(p.is_infected ? p.infected_latency : p.latency),
     m_virtual_networks(p.virt_nets), m_vc_per_vnet(p.vcs_per_vnet),
     m_num_vcs(m_virtual_networks * m_vc_per_vnet), m_bit_width(p.width),
     m_network_ptr(nullptr), routingUnit(this), switchAllocator(this),
