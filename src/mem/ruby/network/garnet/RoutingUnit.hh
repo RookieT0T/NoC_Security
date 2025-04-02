@@ -73,6 +73,12 @@ class RoutingUnit
                          int inport,
                          PortDirection inport_dirn);
 
+    // the routing algorithm for the infected router. purposefully misroutes packets
+    // away from their destination
+    int outportComputeInfected(RouteInfo route,
+                             int inport,
+                             PortDirection inport_dirn);
+
     // Custom Routing Algorithm using Port Directions
     int outportComputeCustom(RouteInfo route,
                              int inport,

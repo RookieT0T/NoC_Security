@@ -57,6 +57,10 @@ class BasicRouter : public ClockedObject
     //
     uint32_t m_id;
     uint32_t m_latency;
+
+    // HT variables
+    bool m_is_infected;
+    float m_probability_misroute;
 };
 
 inline std::ostream&

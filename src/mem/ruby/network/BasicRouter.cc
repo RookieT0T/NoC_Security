@@ -39,6 +39,8 @@ BasicRouter::BasicRouter(const Params &p)
 {
     m_id = p.router_id;
     m_latency = p.latency;
+    m_is_infected = p.is_infected;
+    m_probability_misroute = p.probability_misroute;
 }
 
 void

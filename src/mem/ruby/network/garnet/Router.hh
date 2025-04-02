@@ -142,6 +142,9 @@ class Router : public BasicRouter, public Consumer
     bool functionalRead(Packet *pkt, WriteMask &mask);
     uint32_t functionalWrite(Packet *);
 
+    // HT variables
+    float m_probability_misroute;
+
   private:
     Cycles m_latency;
     uint32_t m_virtual_networks, m_vc_per_vnet, m_num_vcs;
@@ -163,6 +166,9 @@ class Router : public BasicRouter, public Consumer
     statistics::Scalar m_sw_output_arbiter_activity;
 
     statistics::Scalar m_crossbar_activity;
+
+    // HT variables
+    bool m_is_infected;
 };
 
 } // namespace garnet

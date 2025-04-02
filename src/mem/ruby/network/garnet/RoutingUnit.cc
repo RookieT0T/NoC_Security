@@ -36,6 +36,7 @@
 #include "mem/ruby/network/garnet/InputUnit.hh"
 #include "mem/ruby/network/garnet/Router.hh"
 #include "mem/ruby/slicc_interface/Message.hh"
+#include <random>
 
 namespace gem5
 {
@@ -258,6 +259,41 @@ RoutingUnit::outportComputeXY(RouteInfo route,
     }
 
     return m_outports_dirn2idx[outport_dirn];
+}
+
+// The routing algorithm for the infected router. Purposefully misroutes packets
+// away from their destination
+int
+RoutingUnit::outportComputeInfected(RouteInfo route,
+                                 int inport,
+                                 PortDirection inport_dirn)
+{
+    // Get the direction that we SHOULD take, if we weren't infected. assuming XY DOR
+    int xy_outport = outportComputeXY(route, inport, inport_dirn);
+
+    // If the probability to misroute is 0, do not attempt a reroute, return now
+    if (m_router->m_probability_misroute == 0.0f)
+        return xy_outport;
+
+    // Now choose a direction from the remaining ports and go that way (misroute)
+    // within some degree of probability. We do not wish to misroute all the time,
+    // otherwise it would be too obvious that we are malicious.
+    int max_idx = m_outports_dirn2idx.size()-1;
+    std::random_device rd; std::mt19937 gen(rd());
+    std::uniform_real_distribution<> dis_f(0, 1);
+    std::uniform_int_distribution<> dis_i(0, max_idx);
+
+    // Roll against the probability that we misroute this packet or not
+    float roll = dis_f(gen);
+    if (roll > m_router->m_probability_misroute)
+        return xy_outport;
+    
+    // Won the roll, now misroute
+    int misroute_outport;
+    do {
+        misroute_outport = dis_i(gen);
+    } while (misroute_outport == xy_outport);
+    return misroute_outport;
 }
 
 // Template for implementing custom routing algorithm
