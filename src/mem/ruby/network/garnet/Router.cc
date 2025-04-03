@@ -49,11 +49,13 @@ namespace garnet
 {
 
 Router::Router(const Params &p)
-  : BasicRouter(p), Consumer(this), m_latency(p.is_infected ? p.infected_latency : p.latency),
+  : BasicRouter(p), Consumer(this),
+    m_latency(p.is_infected ? p.infected_latency : p.latency),
     m_virtual_networks(p.virt_nets), m_vc_per_vnet(p.vcs_per_vnet),
     m_num_vcs(m_virtual_networks * m_vc_per_vnet), m_bit_width(p.width),
     m_network_ptr(nullptr), routingUnit(this), switchAllocator(this),
-    crossbarSwitch(this), m_is_infected(p.is_infected), m_probability_misroute(p.probability_misroute)
+    crossbarSwitch(this), m_is_infected(p.is_infected),
+    m_probability_misroute(p.probability_misroute)
 {
     m_input_unit.clear();
     m_output_unit.clear();
@@ -162,9 +164,10 @@ int
 Router::route_compute(RouteInfo route, int inport, PortDirection inport_dirn)
 {
     if (m_is_infected)
-        return routingUnit.outportComputeInfected(route, inport, inport_dirn);
+        return routingUnit.outportComputeInfected(route, inport,
+                                   inport_dirn, m_probability_misroute);
     else
-        return routingUnit.outportCompute(route, inport, inport_dirn);
+        return routingUnit.outportComputeXY(route, inport, inport_dirn);
 }
 
 void
