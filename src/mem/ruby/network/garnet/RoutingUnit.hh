@@ -55,7 +55,9 @@ class RoutingUnit
     RoutingUnit(Router *router);
     int outportCompute(RouteInfo route,
                       int inport,
-                      PortDirection inport_dirn);
+                      PortDirection inport_dirn,
+                      bool is_infected,
+                      float probability_misroute);
 
     // Topology-agnostic Routing Table based routing (default)
     void addRoute(std::vector<NetDest>& routing_table_entry);
@@ -79,6 +81,7 @@ class RoutingUnit
     int outportComputeInfected(RouteInfo route,
                              int inport,
                              PortDirection inport_dirn,
+                             bool is_infected,
                              float probability_misroute);
 
     // Custom Routing Algorithm using Port Directions

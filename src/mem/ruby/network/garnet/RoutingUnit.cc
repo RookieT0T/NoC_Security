@@ -169,7 +169,9 @@ RoutingUnit::addOutDirection(PortDirection outport_dirn, int outport_idx)
 
 int
 RoutingUnit::outportCompute(RouteInfo route, int inport,
-                            PortDirection inport_dirn)
+                            PortDirection inport_dirn,
+                            bool is_infected,
+                            float probability_misroute)
 {
     int outport = -1;
 
@@ -194,7 +196,8 @@ RoutingUnit::outportCompute(RouteInfo route, int inport,
             outportComputeXY(route, inport, inport_dirn); break;
         // any custom algorithm
         case CUSTOM_: outport =
-            outportComputeCustom(route, inport, inport_dirn); break;
+            outportComputeInfected(route, inport, inport_dirn,
+                                   is_infected, probability_misroute); break;
         default: outport =
             lookupRoutingTable(route.vnet, route.net_dest); break;
     }
@@ -236,20 +239,20 @@ RoutingUnit::outportComputeXY(RouteInfo route,
 
     if (x_hops > 0) {
         if (x_dirn) {
-            assert(inport_dirn == "Local" || inport_dirn == "West");
+            //assert(inport_dirn == "Local" || inport_dirn == "West");
             outport_dirn = "East";
         } else {
-            assert(inport_dirn == "Local" || inport_dirn == "East");
+            //assert(inport_dirn == "Local" || inport_dirn == "East");
             outport_dirn = "West";
         }
     } else if (y_hops > 0) {
         if (y_dirn) {
             // "Local" or "South" or "West" or "East"
-            assert(inport_dirn != "North");
+            //assert(inport_dirn != "North");
             outport_dirn = "North";
         } else {
             // "Local" or "North" or "West" or "East"
-            assert(inport_dirn != "South");
+            //assert(inport_dirn != "South");
             outport_dirn = "South";
         }
     } else {
@@ -269,11 +272,17 @@ int
 RoutingUnit::outportComputeInfected(RouteInfo route,
                                  int inport,
                                  PortDirection inport_dirn,
+                                 bool is_infected,
                                  float probability_misroute)
 {
     // Get the direction that we SHOULD take,
     // if we weren't infected. assuming XY DOR
     int xy_outport = outportComputeXY(route, inport, inport_dirn);
+
+    // If we are not actually infected, we
+    // can return the correct direction
+    if (!is_infected)
+        return xy_outport;
 
     // If the probability to misroute is 0,
     // do not attempt a reroute, return now
@@ -286,10 +295,9 @@ RoutingUnit::outportComputeInfected(RouteInfo route,
     // We do not wish to misroute all the time,
     // otherwise it would be too
     // obvious that we are malicious.
-    int max_idx = m_outports_dirn2idx.size()-1;
     std::random_device rd; std::mt19937 gen(rd());
     std::uniform_real_distribution<> dis_f(0, 1);
-    std::uniform_int_distribution<> dis_i(0, max_idx);
+    std::uniform_int_distribution<> dis_i(0, 3);
 
     // Roll against the probability that we misroute this packet or not
     float roll = dis_f(gen);
@@ -298,8 +306,37 @@ RoutingUnit::outportComputeInfected(RouteInfo route,
 
     // Won the roll, now misroute
     int misroute_outport;
+    int num_cols = m_router->get_net_ptr()->getNumCols();
+    int my_id = m_router->get_id();
+    int my_x = my_id % num_cols;
+    int my_y = my_id / num_cols;
     do {
         misroute_outport = dis_i(gen);
+
+        PortDirection outport_dirn = "Unknown";
+        switch (misroute_outport) {
+            case 0:
+                outport_dirn = "North"; break;
+            case 1:
+                outport_dirn = "South"; break;
+            case 2:
+                outport_dirn = "East"; break;
+            default:
+                outport_dirn = "West"; break;
+        }
+        // No U-turns
+        if (outport_dirn.compare(inport_dirn) == 0)
+            continue;
+        // Prevent routing outside when on the mesh corners
+        if (my_x == num_cols-1 && outport_dirn.compare("East") == 0)
+            continue;
+        else if (my_x == 0 && outport_dirn.compare("West") == 0)
+            continue;
+        else if (my_y == num_cols-1 && outport_dirn.compare("North") == 0)
+            continue;
+        else if (my_y == 0 && outport_dirn.compare("South") == 0)
+            continue;
+        misroute_outport = m_outports_dirn2idx[outport_dirn];
     } while (misroute_outport == xy_outport);
     return misroute_outport;
 }

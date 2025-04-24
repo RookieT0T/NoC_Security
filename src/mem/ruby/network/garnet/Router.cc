@@ -163,11 +163,10 @@ Router::getInportDirection(int inport)
 int
 Router::route_compute(RouteInfo route, int inport, PortDirection inport_dirn)
 {
-    if (m_is_infected)
-        return routingUnit.outportComputeInfected(route, inport,
-                                   inport_dirn, m_probability_misroute);
-    else
-        return routingUnit.outportComputeXY(route, inport, inport_dirn);
+    return routingUnit.outportCompute(route, inport,
+                                      inport_dirn,
+                                      m_is_infected,
+                                      m_probability_misroute);
 }
 
 void
