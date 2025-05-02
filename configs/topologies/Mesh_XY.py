@@ -66,7 +66,12 @@ class Mesh_XY(SimpleTopology):
 
         # Create the routers in the mesh
         routers = [
-            Router(router_id=i, latency=router_latency)
+            Router(
+                router_id=i,
+                latency=router_latency,
+                is_infected=True if i == 6 or i == 8 else False,
+                probability_misroute=1,
+            )
             for i in range(num_routers)
         ]
         network.routers = routers
