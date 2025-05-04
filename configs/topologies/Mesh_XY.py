@@ -28,8 +28,6 @@
 from common import FileSystemConfig
 from topologies.BaseTopology import SimpleTopology
 
-from mem.ruby.network.garnet.LFSR64 import LFSR64
-
 from m5.objects import *
 from m5.params import *
 
