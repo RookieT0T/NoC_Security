@@ -37,6 +37,9 @@ SimObject('GarnetLink.py', enums=['CDCType'], sim_objects=[
 SimObject('GarnetNetwork.py', sim_objects=[
     'GarnetNetwork', 'GarnetNetworkInterface', 'GarnetRouter'])
 
+SimObject('LFSR64.py', sim_objects=['LFSR64'])
+
+Source('LFSR64.cc')
 Source('GarnetLink.cc')
 Source('GarnetNetwork.cc')
 Source('InputUnit.cc')

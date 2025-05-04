@@ -38,6 +38,13 @@ class BasicRouter(ClockedObject):
     # only used by garnet
     latency = Param.Cycles(1, "number of cycles inside router")
 
-    is_infected = Param.Bool(False, "specify if this router is infected with a HT")
-    infected_latency = Param.Cycles(2, "number of cycles an infected router delays a packet by")
-    probability_misroute = Param.Float(0.0, "specify the probability that an infected router will misroute a packet. [0:1]")
+    is_infected = Param.Bool(
+        False, "specify if this router is infected with a HT"
+    )
+    infected_latency = Param.Cycles(
+        1024, "number of cycles an infected router delays a packet by"
+    )
+    probability_misroute = Param.Float(
+        0.0,
+        "probability that an infected router will misroute a packet. [0:1]",
+    )

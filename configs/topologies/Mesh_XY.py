@@ -28,6 +28,8 @@
 from common import FileSystemConfig
 from topologies.BaseTopology import SimpleTopology
 
+from mem.ruby.network.garnet.LFSR64 import LFSR64
+
 from m5.objects import *
 from m5.params import *
 
@@ -69,12 +71,18 @@ class Mesh_XY(SimpleTopology):
             Router(
                 router_id=i,
                 latency=router_latency,
-                is_infected=True if i == 6 or i == 8 else False,
-                probability_misroute=1,
+                is_infected=True if i == 6 else False,
+                probability_misroute=0.5,
             )
             for i in range(num_routers)
         ]
         network.routers = routers
+
+        # LFSR setup
+        lfsr = LFSR64()
+        lfsr.seed = 1
+        lfsr.latency = 16
+        network.lfsr = lfsr
 
         # link counter to set unique link ids
         link_count = 0

@@ -52,6 +52,7 @@ class GarnetNetwork(RubyNetwork):
     garnet_deadlock_threshold = Param.UInt32(
         50000, "network-level deadlock threshold"
     )
+    lfsr = Param.LFSR64("")
 
 
 class GarnetNetworkInterface(ClockedObject):
