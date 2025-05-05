@@ -113,6 +113,7 @@ RoutingUnit::lookupRoutingTable(int vnet, NetDest msg_destination)
     // Identify the minimum weight among the candidate output links
     int disabled_router_link = -1;
     int temp_weight = -1;
+    int dest_id = -1;
     for (int link = 0; link < m_routing_table[vnet].size(); link++) {
         if (msg_destination.intersectionIsNotEmpty(
             m_routing_table[vnet][link])) {
@@ -127,7 +128,6 @@ RoutingUnit::lookupRoutingTable(int vnet, NetDest msg_destination)
             // that a link connects to, but it (should) work.
             PortDirection dirn = m_outports_idx2dirn[link];
             int this_id = m_router->get_id();
-            int dest_id = -1;
             if (dirn.compare("North") == 0) {
                 dest_id = this_id - gn->getNumRows();
             } else if (dirn.compare("South") == 0) {
@@ -141,7 +141,7 @@ RoutingUnit::lookupRoutingTable(int vnet, NetDest msg_destination)
             // convert dest_id to onehot vector. compare this with
             // the lfsr output, if it matches one of the disabled routers,
             // then we disable the link to that router in this cycle
-            int dest_id_not_zero = dest_id ? 1 : 0;
+            int dest_id_not_zero = (dest_id != 0) ? 1 : 0;
             if (((dest_id_not_zero << (dest_id-1)) &
                     static_cast<int>(lfsr_output)) != 0) {
                 disabled_router_link = link;
@@ -167,7 +167,6 @@ RoutingUnit::lookupRoutingTable(int vnet, NetDest msg_destination)
     }
 
     if (output_link_candidates.size() == 0) {
-        printf("\n%i\n", m_router->get_id());
         fatal("Fatal Error:: No Route exists from this Router.");
         exit(0);
     }
@@ -318,6 +317,10 @@ RoutingUnit::outportComputeInfected(RouteInfo route,
     // if we weren't infected. assuming XY DOR
     int xy_outport = outportComputeXY(route, inport, inport_dirn);
 
+    // If the destination is local, take that always
+    if (m_outports_idx2dirn[xy_outport].compare("Local") == 0)
+        return xy_outport;
+
     // If we are not actually infected, we
     // can return the correct direction
     if (!is_infected)
@@ -334,7 +337,7 @@ RoutingUnit::outportComputeInfected(RouteInfo route,
     // We do not wish to misroute all the time,
     // otherwise it would be too
     // obvious that we are malicious.
-    std::random_device rd; std::mt19937 gen(rd());
+    std::random_device rd; std::mt19937 gen(0);
     std::uniform_real_distribution<> dis_f(0, 1);
     std::uniform_int_distribution<> dis_i(0, 3);
 
@@ -366,12 +369,12 @@ RoutingUnit::outportComputeInfected(RouteInfo route,
         // No U-turns
         if (outport_dirn.compare(inport_dirn) == 0)
             continue;
-        // Prevent routing outside when on the mesh corners
+        // Prevent routing outside when on the mesh edges & corners
         if (my_x == num_cols-1 && outport_dirn.compare("East") == 0)
             continue;
         else if (my_x == 0 && outport_dirn.compare("West") == 0)
             continue;
-        else if (my_y == num_cols-1 && outport_dirn.compare("North") == 0)
+        if (my_y == num_cols-1 && outport_dirn.compare("North") == 0)
             continue;
         else if (my_y == 0 && outport_dirn.compare("South") == 0)
             continue;
