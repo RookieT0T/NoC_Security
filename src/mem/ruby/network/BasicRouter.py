@@ -41,9 +41,6 @@ class BasicRouter(ClockedObject):
     is_infected = Param.Bool(
         False, "specify if this router is infected with a HT"
     )
-    infected_latency = Param.Cycles(
-        1024, "number of cycles an infected router delays a packet by"
-    )
     probability_misroute = Param.Float(
         0.0,
         "probability that an infected router will misroute a packet. [0:1]",

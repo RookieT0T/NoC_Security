@@ -59,7 +59,6 @@ class BasicRouter : public ClockedObject
     uint32_t m_latency;
 
     // HT variables
-    uint32_t m_infected_latency;
     bool m_is_infected;
     float m_probability_misroute;
 };
