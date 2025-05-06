@@ -106,6 +106,15 @@ class RoutingUnit
     std::map<int, PortDirection> m_inports_idx2dirn;
     std::map<int, PortDirection> m_outports_idx2dirn;
     std::map<PortDirection, int> m_outports_dirn2idx;
+
+    // detect if the router we are about to move to is
+    // disabled by the LFSR or not
+    bool is_next_router_disabled(PortDirection outport_dirn);
+
+    PortDirection reroute_dirn(int dest_id,
+                              bool do_misroute,
+                              PortDirection inport_dirn,
+                              PortDirection prev_outport_dirn);
 };
 
 } // namespace garnet

@@ -5,6 +5,8 @@
 #include <random>
 #include <vector>
 
+#include "sim/eventq.hh"
+
 namespace gem5{
 
 namespace ruby{
@@ -13,7 +15,9 @@ namespace garnet{
 
 LFSR64::LFSR64(const Params &p)
     : ClockedObject(p),
-    event([this] {nextBit();}, name() + ".event"),
+    event([this] {nextBit();}, name() + ".event",
+            false, EventFunctionWrapper::Maximum_Pri),
+            // handle before any routing decisions are made
     state(p.seed),
     m_latency(p.latency)
 {

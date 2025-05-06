@@ -111,46 +111,12 @@ RoutingUnit::lookupRoutingTable(int vnet, NetDest msg_destination)
     int num_candidates = 0;
 
     // Identify the minimum weight among the candidate output links
-    int disabled_router_link = -1;
-    int temp_weight = -1;
-    int dest_id = -1;
     for (int link = 0; link < m_routing_table[vnet].size(); link++) {
         if (msg_destination.intersectionIsNotEmpty(
             m_routing_table[vnet][link])) {
 
-            // if the link exists, check if the router it
-            // connects to is the disabled router this round.
-            GarnetNetwork* gn = m_router->get_net_ptr();
-            uint16_t lfsr_output = gn->m_lfsr->generate16Bitstream(1);
-            temp_weight = m_weight_table[link];
-
-            // perhaps not the cleanest way to find the router ID
-            // that a link connects to, but it (should) work.
-            PortDirection dirn = m_outports_idx2dirn[link];
-            int this_id = m_router->get_id();
-            if (dirn.compare("North") == 0) {
-                dest_id = this_id - gn->getNumRows();
-            } else if (dirn.compare("South") == 0) {
-                dest_id = this_id + gn->getNumRows();
-            } else if (dirn.compare("East") == 0) {
-                dest_id = this_id + 1;
-            } else if (dirn.compare("West") == 0) {
-                dest_id = this_id - 1;
-            }
-
-            // convert dest_id to onehot vector. compare this with
-            // the lfsr output, if it matches one of the disabled routers,
-            // then we disable the link to that router in this cycle
-            int dest_id_not_zero = (dest_id != 0) ? 1 : 0;
-            if (((dest_id_not_zero << (dest_id-1)) &
-                    static_cast<int>(lfsr_output)) != 0) {
-                disabled_router_link = link;
-                temp_weight = m_weight_table[link];
-                m_weight_table[link] = INT32_MAX;
-            }
-
-            if (m_weight_table[link] <= min_weight)
-                min_weight = m_weight_table[link];
+        if (m_weight_table[link] <= min_weight)
+            min_weight = m_weight_table[link];
         }
     }
 
@@ -177,10 +143,6 @@ RoutingUnit::lookupRoutingTable(int vnet, NetDest msg_destination)
         candidate = rand() % num_candidates;
 
     output_link = output_link_candidates.at(candidate);
-
-    // before returning, set the link weight back to what it was
-    if (disabled_router_link != -1)
-        m_weight_table[disabled_router_link] = temp_weight;
     return output_link;
 }
 
@@ -300,6 +262,11 @@ RoutingUnit::outportComputeXY(RouteInfo route,
         panic("x_hops == y_hops == 0");
     }
 
+    // check that the outport dirn's connecting router is not disabled
+    // if it is, then we must reroute closest to the final destination
+    if (is_next_router_disabled(outport_dirn))
+        outport_dirn = reroute_dirn(dest_id, false, inport_dirn, outport_dirn);
+
     return m_outports_dirn2idx[outport_dirn];
 }
 
@@ -315,7 +282,8 @@ RoutingUnit::outportComputeInfected(RouteInfo route,
 {
     // Get the direction that we SHOULD take,
     // if we weren't infected. assuming XY DOR
-    int xy_outport = outportComputeXY(route, inport, inport_dirn);
+    int xy_outport = lookupRoutingTable(route.vnet, route.net_dest);
+                    //outportComputeXY(route, inport, inport_dirn);
 
     // If the destination is local, take that always
     if (m_outports_idx2dirn[xy_outport].compare("Local") == 0)
@@ -339,7 +307,6 @@ RoutingUnit::outportComputeInfected(RouteInfo route,
     // obvious that we are malicious.
     std::random_device rd; std::mt19937 gen(0);
     std::uniform_real_distribution<> dis_f(0, 1);
-    std::uniform_int_distribution<> dis_i(0, 3);
 
     // Roll against the probability that we misroute this packet or not
     float roll = dis_f(gen);
@@ -348,38 +315,14 @@ RoutingUnit::outportComputeInfected(RouteInfo route,
 
     // Won the roll, now misroute
     int misroute_outport;
-    int num_cols = m_router->get_net_ptr()->getNumCols();
-    int my_id = m_router->get_id();
-    int my_x = my_id % num_cols;
-    int my_y = my_id / num_cols;
     do {
-        misroute_outport = dis_i(gen);
+        PortDirection misroute_dirn = reroute_dirn(route.dest_router,
+                                            true,
+                                            inport_dirn,
+                                            m_outports_idx2dirn[xy_outport]);
+        misroute_outport = m_outports_dirn2idx[misroute_dirn];
+    } while (!is_next_router_disabled(m_outports_idx2dirn[misroute_outport]));
 
-        PortDirection outport_dirn = "Unknown";
-        switch (misroute_outport) {
-            case 0:
-                outport_dirn = "North"; break;
-            case 1:
-                outport_dirn = "South"; break;
-            case 2:
-                outport_dirn = "East"; break;
-            default:
-                outport_dirn = "West"; break;
-        }
-        // No U-turns
-        if (outport_dirn.compare(inport_dirn) == 0)
-            continue;
-        // Prevent routing outside when on the mesh edges & corners
-        if (my_x == num_cols-1 && outport_dirn.compare("East") == 0)
-            continue;
-        else if (my_x == 0 && outport_dirn.compare("West") == 0)
-            continue;
-        if (my_y == num_cols-1 && outport_dirn.compare("North") == 0)
-            continue;
-        else if (my_y == 0 && outport_dirn.compare("South") == 0)
-            continue;
-        misroute_outport = m_outports_dirn2idx[outport_dirn];
-    } while (misroute_outport == xy_outport);
     return misroute_outport;
 }
 
@@ -391,6 +334,95 @@ RoutingUnit::outportComputeCustom(RouteInfo route,
                                  PortDirection inport_dirn)
 {
     panic("%s placeholder executed", __FUNCTION__);
+}
+
+// detect if the router we are about to move to is
+// disabled by the LFSR or not
+bool
+RoutingUnit::is_next_router_disabled(PortDirection outport_dirn)
+{
+    // get current lfsr state as a bitstream
+    GarnetNetwork* gn = m_router->get_net_ptr();
+    uint16_t lfsr_state = gn->m_lfsr->generate16Bitstream(1);
+
+    // get the router ID for the next router in this path
+    int my_id = m_router->get_id();
+    int next_id = -1;
+    if (outport_dirn.compare("North") == 0)
+        next_id = my_id - gn->getNumCols();
+    else if (outport_dirn.compare("South") == 0)
+        next_id = my_id + gn->getNumCols();
+    else if (outport_dirn.compare("East") == 0)
+        next_id = my_id + 1;
+    else if (outport_dirn.compare("West") == 0)
+        next_id = my_id - 1;
+    else // destination is not another router
+        return false;
+
+    // convert the next router ID into a onehot vector
+    uint16_t next_id_onehot = 0;
+    if (next_id != 0)
+        next_id_onehot = 1 << (next_id-1);
+
+    // compare the lfsr state to the onehot vector
+    // if they overlap, then the next router is disabled
+    // otherwise we are free to take this routing path
+    return (lfsr_state & next_id_onehot) != 0;
+}
+
+PortDirection
+RoutingUnit::reroute_dirn(int dest_id,
+                        bool do_misroute,
+                        PortDirection inport_dirn,
+                        PortDirection prev_outport_dirn)
+{
+    int num_cols = m_router->get_net_ptr()->getNumCols();
+    int my_id = m_router->get_id();
+    int my_x = my_id % num_cols;
+    int my_y = my_id / num_cols;
+    int dest_x = dest_id % num_cols;
+    int dest_y = dest_id / num_cols;
+
+    // first rerouting decision, unaware of mesh corners/edges
+    PortDirection new_dirn = "Unknown";
+    if (prev_outport_dirn.compare("North") == 0 ||
+        prev_outport_dirn.compare("South") == 0) {
+        if (my_x < dest_x)
+            new_dirn = "East";
+        else
+            new_dirn = "West";
+    } else if (prev_outport_dirn.compare("East") == 0 ||
+             prev_outport_dirn.compare("West") == 0) {
+        if (my_y < dest_y)
+            new_dirn = "South";
+        else
+            new_dirn = "North";
+    }
+
+    // attempt to misroute if we are infected
+    if (do_misroute) {
+        if (new_dirn.compare("North") == 0)
+            new_dirn = "South";
+        else if (new_dirn.compare("South") == 0)
+            new_dirn = "North";
+        if (new_dirn.compare("East") == 0)
+            new_dirn = "West";
+        else if (new_dirn.compare("West") == 0)
+            new_dirn = "East";
+    }
+
+    // we must now check for edges and corners, and reroute accordingly
+    // U-turns may be necessary (unfortunate, but I am unsure how to stall)
+    if (my_x == num_cols-1 && new_dirn.compare("East") == 0)
+        new_dirn = "West";
+    else if (my_x == 0 && new_dirn.compare("West") == 0)
+        new_dirn = "East";
+    if (my_y == num_cols-1 && new_dirn.compare("North") == 0)
+        new_dirn = "South";
+    else if (my_y == 0 && new_dirn.compare("South") == 0)
+        new_dirn = "North";
+
+    return new_dirn;
 }
 
 } // namespace garnet
