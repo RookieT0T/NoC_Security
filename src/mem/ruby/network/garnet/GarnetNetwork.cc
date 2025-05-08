@@ -71,7 +71,6 @@ GarnetNetwork::GarnetNetwork(const Params &p)
     m_buffers_per_ctrl_vc = p.buffers_per_ctrl_vc;
     m_routing_algorithm = p.routing_algorithm;
     m_next_packet_id = 0;
-    m_lfsr = p.lfsr;
 
     m_enable_fault_model = p.enable_fault_model;
     if (m_enable_fault_model)
@@ -106,6 +105,12 @@ GarnetNetwork::GarnetNetwork(const Params &p)
 
     // Print Garnet version
     inform("Garnet version %s\n", garnetVersion);
+}
+
+void
+GarnetNetwork::updateLookUpTable(){
+    assert(m_topology_ptr != NULL);
+    m_topology_ptr->createLinks(this);
 }
 
 void

@@ -26,18 +26,18 @@
  * (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE USE
  * OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
  */
-
-#include "mem/ruby/network/Topology.hh"
-
-#include <cassert>
-
-#include "base/trace.hh"
-#include "debug/RubyNetwork.hh"
-#include "mem/ruby/common/NetDest.hh"
-#include "mem/ruby/network/BasicLink.hh"
-#include "mem/ruby/network/Network.hh"
-#include "mem/ruby/slicc_interface/AbstractController.hh"
-#include "mem/ruby/system/RubySystem.hh"
+ #include <cassert>
+ #include <iostream>
+ #include <random>
+ #include <tuple>
+ #include "base/trace.hh"
+ #include "debug/RubyNetwork.hh"
+ #include "mem/ruby/common/NetDest.hh"
+ #include "mem/ruby/network/BasicLink.hh"
+ #include "mem/ruby/network/Network.hh"
+ #include "mem/ruby/network/Topology.hh"
+ #include "mem/ruby/slicc_interface/AbstractController.hh"
+ #include "mem/ruby/system/RubySystem.hh"
 
 namespace gem5
 {
@@ -45,7 +45,8 @@ namespace gem5
 namespace ruby
 {
 
-const int INFINITE_LATENCY = 10000; // Yes, this is a big hack
+const int INFINITE_LATENCY = 10000;     // Yes, this is a big hack
+const int INFINITE_WEIGHTS = 1000;
 
 // Note: In this file, we use the first 2*m_nodes SwitchIDs to
 // represent the input and output endpoint links.  These really are
@@ -66,6 +67,12 @@ Topology::Topology(uint32_t num_nodes, uint32_t num_routers,
 {
     // Total nodes/controllers in network
     assert(m_nodes > 1);
+    /*
+    std::cout << "num_vnets: " << num_vnets << std::endl;
+    std::cout << "num_nodes: " << num_nodes << std::endl;
+    std::cout << "num_routers: " << num_routers << std::endl;
+    std::cout << "m_nodes: " << m_nodes << std::endl;
+    */
 
     // analyze both the internal and external links, create data structures.
     // The python created external links are bi-directional,
@@ -95,6 +102,7 @@ Topology::Topology(uint32_t num_nodes, uint32_t num_routers,
     }
 
     // Internal Links
+    // after traversing this loop, m_link_map is fully set up
     for (std::vector<BasicIntLink*>::const_iterator i = int_links.begin();
          i != int_links.end(); ++i) {
         BasicIntLink *int_link = (*i);
@@ -115,9 +123,16 @@ Topology::Topology(uint32_t num_nodes, uint32_t num_routers,
     }
 }
 
+
 void
 Topology::createLinks(Network *net)
 {
+    uint16_t lfsr_output = net->m_lfsr->generate16Bitstream(1);
+    int offset = m_ruby_system->MachineType_base_number(MachineType_NUM);
+    std::cout << "offset is: " << offset << std::endl;
+
+    std::vector<std::tuple<int, int, int, int>> rollBackList;
+
     // Find maximum switchID
     SwitchID max_switch_id = 0;
     for (LinkMap::const_iterator i = m_link_map.begin();
@@ -128,13 +143,16 @@ Topology::createLinks(Network *net)
     }
 
     // Initialize weight, latency, and inter switched vectors
-    int num_switches = max_switch_id+1;
+    int num_switches = max_switch_id+1;     // 0 - 79 + 1
+    // m_vnets * num_switches * num_switches - infinity
     Matrix topology_weights(m_vnets,
             std::vector<std::vector<int>>(num_switches,
             std::vector<int>(num_switches, INFINITE_LATENCY)));
+    // num_switches * num_switches * m_vnets - -1
     Matrix component_latencies(num_switches,
             std::vector<std::vector<int>>(num_switches,
             std::vector<int>(m_vnets, -1)));
+    // num_switches * num_switches * m_vnets - 0
     Matrix component_inter_switches(num_switches,
             std::vector<std::vector<int>>(num_switches,
             std::vector<int>(m_vnets, 0)));
@@ -163,10 +181,29 @@ Topology::createLinks(Network *net)
                     // cannot carry same vnets.
                     fatal_if(vnet_done[v], "Two links connecting same src"
                     " and destination cannot support same vnets");
+                    int src_routerID = src - offset * 2;
+                    int dst_routerID = dst - offset * 2;
 
-                    component_latencies[src][dst][v] = link->m_latency;
-                    topology_weights[v][src][dst] = link->m_weight;
-                    vnet_done[v] = true;
+                    uint16_t src_oneHot = 1u << src_routerID;
+                    uint16_t dst_oneHot = 1u << dst_routerID;
+
+                    uint16_t src_final = src_oneHot & lfsr_output;
+                    uint16_t dst_final = dst_oneHot & lfsr_output;
+
+                    if (src_final != 0 || dst_final != 0) {
+                        component_latencies[src][dst][v] = link->m_latency;
+
+                        topology_weights[v][src][dst] = INFINITE_WEIGHTS;
+                        std::tuple<int, int, int, int> temp(v, src, \
+                            dst, link->m_weight);
+                        rollBackList.push_back(temp);
+                        vnet_done[v] = true;
+                    }
+                    else{
+                        component_latencies[src][dst][v] = link->m_latency;
+                        topology_weights[v][src][dst] = link->m_weight;
+                        vnet_done[v] = true;
+                    }
                 }
             } else {
                 for (int v = 0; v < link->mVnets.size(); v++) {
@@ -178,9 +215,28 @@ Topology::createLinks(Network *net)
                     fatal_if(vnet_done[vnet], "Two links connecting same src"
                     " and destination cannot support same vnets");
 
-                    component_latencies[src][dst][vnet] = link->m_latency;
-                    topology_weights[vnet][src][dst] = link->m_weight;
-                    vnet_done[vnet] = true;
+                    int src_routerID = src - offset * 2;
+                    int dst_routerID = dst - offset * 2;
+
+                    uint16_t src_oneHot = 1u << src_routerID;
+                    uint16_t dst_oneHot = 1u << dst_routerID;
+
+                    uint16_t src_final = src_oneHot & lfsr_output;
+                    uint16_t dst_final = dst_oneHot & lfsr_output;
+
+                    if (src_final != 0 || dst_final != 0) {
+                        component_latencies[src][dst][vnet] = link->m_latency;
+                        topology_weights[vnet][src][dst] = INFINITE_WEIGHTS;
+                        std::tuple<int, int, int, int> temp(vnet, src, \
+                            dst, link->m_weight);
+                        rollBackList.push_back(temp);
+                        vnet_done[vnet] = true;
+                    }
+                    else {
+                        component_latencies[src][dst][vnet] = link->m_latency;
+                        topology_weights[vnet][src][dst] = link->m_weight;
+                        vnet_done[vnet] = true;
+                    }
                 }
             }
         }
@@ -214,6 +270,17 @@ Topology::createLinks(Network *net)
             if (realLink) {
                 makeLink(net, i, j, routingMap);
             }
+        }
+    }
+
+    // roll back
+    if (rollBackList.size() != 0) {
+        for (auto& t : rollBackList) {
+            int vnetIndex = std::get<0>(t);
+            int srcIndex = std::get<1>(t);
+            int dstIndex = std::get<2>(t);
+            int initialWeights = std::get<3>(t);
+            topology_weights[vnetIndex][srcIndex][dstIndex] = initialWeights;
         }
     }
 }
@@ -423,10 +490,15 @@ Topology::shortest_path_to_node(SwitchID src, SwitchID next,
     int max_machines;
 
     machines = MachineType_NUM;
+    //std::cout << " MachineType_NUM / machines: " << machines << std::endl;
     max_machines = m_ruby_system->MachineType_base_number(MachineType_NUM);
+    //std::cout << "max_machines: " << max_machines << std::endl;
 
+    // which machines' shortest paths go through src -> next link
+    // the number of different machine types defined in the system
     for (int m = 0; m < machines; m++) {
         for (NodeID i = 0;
+            // the number of machine nodes for a specific machine type (m)
             i < m_ruby_system->MachineType_base_count((MachineType)m); i++) {
             // we use "d+max_machines" below since the "destination"
             // switches for the machines are numbered

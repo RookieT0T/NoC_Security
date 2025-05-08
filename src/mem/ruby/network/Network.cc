@@ -67,6 +67,7 @@ Network::Network(const Params &p)
 
     m_ruby_system = p.ruby_system;
     m_ruby_system->registerNetwork(this);
+    m_lfsr = p.lfsr;
 
     // Populate localNodeVersions with the version of each MachineType in
     // this network. This will be used to compute a global to local ID.

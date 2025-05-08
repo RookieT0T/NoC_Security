@@ -79,7 +79,7 @@ class Mesh_XY(SimpleTopology):
         # LFSR setup
         lfsr = LFSR64()
         lfsr.seed = 1
-        lfsr.latency = 16
+        lfsr.latency = 2560
         network.lfsr = lfsr
 
         # link counter to set unique link ids

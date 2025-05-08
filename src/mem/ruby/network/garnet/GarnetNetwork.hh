@@ -38,7 +38,6 @@
 #include "mem/ruby/network/Network.hh"
 #include "mem/ruby/network/fault_model/FaultModel.hh"
 #include "mem/ruby/network/garnet/CommonTypes.hh"
-#include "mem/ruby/network/garnet/LFSR64.hh"
 #include "params/GarnetNetwork.hh"
 
 namespace gem5
@@ -67,6 +66,8 @@ class GarnetNetwork : public Network
     ~GarnetNetwork() = default;
 
     void init();
+
+    void updateLookUpTable();
 
     const char *garnetVersion = "3.0";
 
@@ -157,8 +158,6 @@ class GarnetNetwork : public Network
 
     void update_traffic_distribution(RouteInfo route);
     int getNextPacketID() { return m_next_packet_id++; }
-
-    LFSR64* m_lfsr;
 
   protected:
     // Configuration

@@ -93,13 +93,12 @@ class RoutingUnit
     // of vnets or if the vector supports all vnets.
     bool supportsVnet(int vnet, std::vector<int> sVnets);
 
-
-  private:
-    Router *m_router;
-
     // Routing Table
     std::vector<std::vector<NetDest>> m_routing_table;
     std::vector<int> m_weight_table;
+
+  private:
+    Router *m_router;
 
     // Inport and Outport direction to idx maps
     std::map<PortDirection, int> m_inports_dirn2idx;

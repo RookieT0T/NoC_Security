@@ -65,3 +65,4 @@ class RubyNetwork(ClockedObject):
         "Size of data messages. Defaults to the parent "
         "RubySystem cache line size.",
     )
+    lfsr = Param.LFSR64("")

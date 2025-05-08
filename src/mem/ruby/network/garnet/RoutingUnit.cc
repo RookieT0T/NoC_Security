@@ -26,18 +26,15 @@
  * (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE USE
  * OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
  */
-
-
-#include "mem/ruby/network/garnet/RoutingUnit.hh"
-
-#include <random>
-
-#include "base/cast.hh"
-#include "base/compiler.hh"
-#include "debug/RubyNetwork.hh"
-#include "mem/ruby/network/garnet/InputUnit.hh"
-#include "mem/ruby/network/garnet/Router.hh"
-#include "mem/ruby/slicc_interface/Message.hh"
+ #include <iostream>
+ #include <random>
+ #include "base/cast.hh"
+ #include "base/compiler.hh"
+ #include "debug/RubyNetwork.hh"
+ #include "mem/ruby/network/garnet/InputUnit.hh"
+ #include "mem/ruby/network/garnet/Router.hh"
+ #include "mem/ruby/network/garnet/RoutingUnit.hh"
+ #include "mem/ruby/slicc_interface/Message.hh"
 
 namespace gem5
 {
@@ -95,95 +92,56 @@ RoutingUnit::supportsVnet(int vnet, std::vector<int> sVnets)
  * Routes can be biased via weight assignments in the topology file.
  * Correct weight assignments are critical to provide deadlock avoidance.
  */
-int
-RoutingUnit::lookupRoutingTable(int vnet, NetDest msg_destination)
-{
-    // First find all possible output link candidates
-    // For ordered vnet, just choose the first
-    // (to make sure different packets don't choose different routes)
-    // For unordered vnet, randomly choose any of the links
-    // To have a strict ordering between links, they should be given
-    // different weights in the topology file
+ int
+ RoutingUnit::lookupRoutingTable(int vnet, NetDest msg_destination)
+ {
+     // First find all possible output link candidates
+     // For ordered vnet, just choose the first
+     // (to make sure different packets don't choose different routes)
+     // For unordered vnet, randomly choose any of the links
+     // To have a strict ordering between links, they should be given
+     // different weights in the topology file
 
-    int output_link = -1;
-    int min_weight = INFINITE_;
-    std::vector<int> output_link_candidates;
-    int num_candidates = 0;
+     int output_link = -1;
+     int min_weight = INFINITE_;
+     std::vector<int> output_link_candidates;
+     int num_candidates = 0;
 
-    // Identify the minimum weight among the candidate output links
-    int disabled_router_link = -1;
-    int temp_weight = -1;
-    int dest_id = -1;
-    for (int link = 0; link < m_routing_table[vnet].size(); link++) {
-        if (msg_destination.intersectionIsNotEmpty(
-            m_routing_table[vnet][link])) {
+     // Identify the minimum weight among the candidate output links
+     for (int link = 0; link < m_routing_table[vnet].size(); link++) {
+         if (msg_destination.intersectionIsNotEmpty(
+             m_routing_table[vnet][link])) {
 
-            // if the link exists, check if the router it
-            // connects to is the disabled router this round.
-            GarnetNetwork* gn = m_router->get_net_ptr();
-            uint16_t lfsr_output = gn->m_lfsr->generate16Bitstream(1);
-            temp_weight = m_weight_table[link];
+         if (m_weight_table[link] <= min_weight)
+             min_weight = m_weight_table[link];
+         }
+     }
 
-            // perhaps not the cleanest way to find the router ID
-            // that a link connects to, but it (should) work.
-            PortDirection dirn = m_outports_idx2dirn[link];
-            int this_id = m_router->get_id();
-            if (dirn.compare("North") == 0) {
-                dest_id = this_id - gn->getNumRows();
-            } else if (dirn.compare("South") == 0) {
-                dest_id = this_id + gn->getNumRows();
-            } else if (dirn.compare("East") == 0) {
-                dest_id = this_id + 1;
-            } else if (dirn.compare("West") == 0) {
-                dest_id = this_id - 1;
-            }
+     // Collect all candidate output links with this minimum weight
+     for (int link = 0; link < m_routing_table[vnet].size(); link++) {
+         if (msg_destination.intersectionIsNotEmpty(
+             m_routing_table[vnet][link])) {
 
-            // convert dest_id to onehot vector. compare this with
-            // the lfsr output, if it matches one of the disabled routers,
-            // then we disable the link to that router in this cycle
-            int dest_id_not_zero = (dest_id != 0) ? 1 : 0;
-            if (((dest_id_not_zero << (dest_id-1)) &
-                    static_cast<int>(lfsr_output)) != 0) {
-                disabled_router_link = link;
-                temp_weight = m_weight_table[link];
-                m_weight_table[link] = INT32_MAX;
-            }
+             if (m_weight_table[link] == min_weight) {
+                 num_candidates++;
+                 output_link_candidates.push_back(link);
+             }
+         }
+     }
 
-            if (m_weight_table[link] <= min_weight)
-                min_weight = m_weight_table[link];
-        }
-    }
+     if (output_link_candidates.size() == 0) {
+         fatal("Fatal Error:: No Route exists from this Router.");
+         exit(0);
+     }
 
-    // Collect all candidate output links with this minimum weight
-    for (int link = 0; link < m_routing_table[vnet].size(); link++) {
-        if (msg_destination.intersectionIsNotEmpty(
-            m_routing_table[vnet][link])) {
+     // Randomly select any candidate output link
+     int candidate = 0;
+     if (!(m_router->get_net_ptr())->isVNetOrdered(vnet))
+         candidate = rand() % num_candidates;
 
-            if (m_weight_table[link] == min_weight) {
-                num_candidates++;
-                output_link_candidates.push_back(link);
-            }
-        }
-    }
-
-    if (output_link_candidates.size() == 0) {
-        fatal("Fatal Error:: No Route exists from this Router.");
-        exit(0);
-    }
-
-    // Randomly select any candidate output link
-    int candidate = 0;
-    if (!(m_router->get_net_ptr())->isVNetOrdered(vnet))
-        candidate = rand() % num_candidates;
-
-    output_link = output_link_candidates.at(candidate);
-
-    // before returning, set the link weight back to what it was
-    if (disabled_router_link != -1)
-        m_weight_table[disabled_router_link] = temp_weight;
-    return output_link;
+     output_link = output_link_candidates.at(candidate);
+     return output_link;
 }
-
 
 void
 RoutingUnit::addInDirection(PortDirection inport_dirn, int inport_idx)

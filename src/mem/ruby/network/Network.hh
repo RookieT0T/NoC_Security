@@ -48,14 +48,10 @@
  * connections between cache controllers and directory controllers as
  * well as the links between chip and network switches.
  */
-
 #ifndef __MEM_RUBY_NETWORK_NETWORK_HH__
 #define __MEM_RUBY_NETWORK_NETWORK_HH__
-
-#include <iostream>
 #include <string>
 #include <unordered_map>
-#include <vector>
 
 #include "base/addr_range.hh"
 #include "base/types.hh"
@@ -65,6 +61,7 @@
 #include "mem/ruby/common/TypeDefines.hh"
 #include "mem/ruby/network/Topology.hh"
 #include "mem/ruby/network/dummy_port.hh"
+#include "mem/ruby/network/garnet/LFSR64.hh"
 #include "mem/ruby/protocol/LinkDirection.hh"
 #include "mem/ruby/protocol/MessageSizeType.hh"
 #include "params/RubyNetwork.hh"
@@ -151,6 +148,8 @@ class Network : public ClockedObject
     bool getRandomization() const;
     bool getWarmupEnabled() const;
     RubySystem *getRubySystem() const { return m_ruby_system; }
+
+    garnet::LFSR64* m_lfsr;
 
   protected:
     // Private copy constructor and assignment operator

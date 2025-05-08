@@ -163,10 +163,14 @@ Router::getInportDirection(int inport)
 int
 Router::route_compute(RouteInfo route, int inport, PortDirection inport_dirn)
 {
-    return routingUnit.outportCompute(route, inport,
-                                      inport_dirn,
-                                      m_is_infected,
-                                      m_probability_misroute);
+    int ans = routingUnit.outportCompute(route, inport, inport_dirn, \
+        m_is_infected, m_probability_misroute);
+
+    routingUnit.m_routing_table.clear();
+    routingUnit.m_weight_table.clear();
+    GarnetNetwork* netPtr = get_net_ptr();
+    netPtr->updateLookUpTable();
+    return ans;
 }
 
 void
